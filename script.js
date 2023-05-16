@@ -3,6 +3,7 @@ import { queryTotalSupplyFT, queryActiveMinting, querySupplyNFTs } from './query
 const explorerUrlMainnet = "https://explorer.bitcoinunlimited.info";
 const explorerUrlChipnet = "https://chipnet.chaingraph.cash";
 const trustedTokenLists = [
+  "https://raw.githubusercontent.com/cryptobugnft/invalidcash-token-registry/main/example_bcmr.json",
   "https://otr.cash/.well-known/bitcoin-cash-metadata-registry.json",
   "https://raw.githubusercontent.com/mr-zwets/example_bcmr/main/example_bcmr.json"
 ];
