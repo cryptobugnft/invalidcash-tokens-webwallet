@@ -310,14 +310,14 @@ async function loadWalletInfo() {
     if(selectedMethod === "github") inputField = document.querySelector('#bcmrUrlGithub').value;
     if(selectedMethod === "website") inputField = document.querySelector('#bcmrUrlWebsite').value;
     if(selectedMethod === "IPFS") {
-      inputField = document.querySelector('#bcmrIpfs').value;
+      inputField = "ipfs://" + document.querySelector('#bcmrIpfs').value;
       httpsSelected = false;
     }
     let opreturnData
     if(inputField){
-      let validinput = httpsSelected? !inputField.startsWith("http"): inputField.startsWith("ipfs://");
+      let validinput = httpsSelected? !inputField.startsWith("http"): inputField.startsWith("ipfs://baf");
       if(!validinput){
-        httpsSelected ? alert("Urls should not have any prefix!") : alert("Ipfs location should start with ipfs prefix!");
+        httpsSelected ? alert("Urls should not have any prefix!") : alert("Ipfs location should be a v1 CID");
         return
       }
       try{
@@ -464,6 +464,7 @@ async function loadWalletInfo() {
         for(let i=1; i<children.length; i++){
           const nftCard = children[i];
           const nft = token.nfts[i-1];
+          newIcon(nftCard, tokenInfo?.uris?.icon);
           const NFTmetadata = tokenInfo.token.nfts?.parse.types[(nft.tokenData.commitment)];
           if(NFTmetadata) addNftMetadata(nftCard, NFTmetadata);
         }
@@ -742,7 +743,7 @@ async function loadWalletInfo() {
           const childNftCommitment = nftCommitment || 'none'
           childNft.querySelector("#childNftCommitment").textContent = `Commitment: ${childNftCommitment}`
 
-          generateIcon(childNft);
+          generateIcon(childNft, tokenInfo?.uris?.icon);
           renderNft(token.nfts[i],childNft);
 
           tokenCard.querySelector(".item").appendChild(childNft);
