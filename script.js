@@ -226,6 +226,7 @@ async function loadWalletInfo() {
   document.querySelector('#depositAddr').innerText = regularAddr;
   document.querySelector('#depositTokenAddr').innerText = tokenAddr;
   document.getElementById("explorerLink").setAttribute("href",explorerAddr);
+  console.log(explorerAddr);
 
   document.querySelector('#qr1').contents = regularAddr;
   document.querySelector('#qr2').contents = tokenAddr;
