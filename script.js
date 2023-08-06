@@ -222,7 +222,7 @@ async function loadWalletInfo() {
   // Initilize address and display QR code
   const regularAddr = await wallet.getDepositAddress();
   const tokenAddr = await wallet.getTokenDepositAddress();
-  const explorerAddr = regularAddr.replace("bitcoincash:","");
+  const explorerAddr = "<a href={'https://explorer.salemkode.com/address/" + regularAddr.replace("bitcoincash:","") + "'>transaction</a>";
   document.querySelector('#depositAddr').innerText = regularAddr;
   document.querySelector('#depositTokenAddr').innerText = tokenAddr;
   document.querySelector('#explorerAddr').innerText = explorerAddr;
