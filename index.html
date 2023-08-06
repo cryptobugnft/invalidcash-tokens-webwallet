@@ -127,6 +127,24 @@
           </p>
           <input type="button" class="primaryButton" id="send" value="Send">
         </fieldset>
+
+        <fieldset style="margin-top: 15px">
+          <legend>View Wallet Transactions</legend>
+          <p class="inputGroup">
+            View in Explorer <a href={explorerAddr} >target="_blank">transaction</a>
+ 
+            <span class="addressInput"><input id="sendAddr" placeholder="address"></span>
+            <span class="sendAmountGroup">
+              <span style="width: 100%;" class="input-icon input-icon-right">
+                <input id="sendAmount" type="text"placeholder="amount">
+                <i id="sendUnit" style="color: black;">BCH</i>
+              </span>
+              <button onclick="maxBch(event)" style="color: black;">max</button>
+            </span>
+          </p>
+          <input type="button" class="primaryButton" id="send" value="Send">
+        </fieldset>
+
       </div>
 
       <div id="tokenView" class="hide tokenView">
