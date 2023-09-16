@@ -56,6 +56,9 @@ function toggleDarkmode() {
   document.querySelector('#darkmode').checked = darkMode;
 }
 
+// Overwrite any browser stored select options 
+document.querySelector('#newtokens').value = "-select-";
+
 // Logic default unit
 const readUnit = localStorage.getItem("unit");
 if(readUnit) document.querySelector('#selectUnit').value = readUnit;
@@ -325,7 +328,7 @@ async function loadWalletInfo() {
         return
       }
       try{
-        const bcmrLocation = selectedMethod === "website"? "/.well-known/bitcoin-cash-metadata-registry.json" : "";
+        const bcmrLocation = selectedMethod === "website" && !inputField.endsWith(".json")? "/.well-known/bitcoin-cash-metadata-registry.json" : "";
         const fetchLocation = httpsSelected ? "https://" + inputField + bcmrLocation : ipfsGateway + inputField.slice(7);
         const reponse = await fetch(fetchLocation);
         const bcmrContent = await reponse.text();
@@ -467,8 +470,9 @@ async function loadWalletInfo() {
         const children = tokenCard.children;
         for(let i=1; i<children.length; i++){
           const nftCard = children[i];
-          const nft = token.nfts[i-1];
-          newIcon(nftCard, tokenInfo?.uris?.icon);
+          const nft = token.nfts[i - 1];
+          const icon = tokenInfo?.uris?.icon
+          if (icon) newIcon(nftCard, icon);
           const NFTmetadata = tokenInfo.token.nfts?.parse.types[(nft.tokenData.commitment)];
           if(NFTmetadata) addNftMetadata(nftCard, NFTmetadata);
         }
@@ -960,6 +964,15 @@ window.changeView = function changeView(newView) {
 
 // Change create token view
 window.selectTokenType = function selectTokenType(event){
+  const infoTokenTypes = document.querySelector('#infoTokenTypes');
+  const createTokenType = document.querySelector('#createTokenType');
+  if(event.target.value === "-select-"){
+    infoTokenTypes.classList.remove("hide");
+    createTokenType.classList.add("hide");
+  } else {
+    createTokenType.classList.remove("hide");
+    infoTokenTypes.classList.add("hide");
+  }
   const tokenSupply = document.querySelector('#tokenSupply').parentElement;
   const tokenCommitment = document.querySelector('#inputNftCommitment').parentElement;
   tokenSupply.classList.add("hide");
