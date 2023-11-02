@@ -27,47 +27,62 @@ header {
 .icon{
   vertical-align: text-bottom;
 }
-#settingsIcon.dark{
-  content:url("images/cogGrey.svg");
+.settingsIcon.dark{
+  content:url("/images/cogGrey.svg");
 }
-.active #settingsIcon{
+.active .settingsIcon{
   content:url("/images/cogGreen.svg");
 }
+.settingsIcon{
+  content:url("/images/settings.svg");
+}
 .plusIcon.dark{
-  content:url("images/plus-squareGrey.svg");
+  content:url("/images/plus-squareGrey.svg");
 }
 .importIcon.dark{
-  content:url("images/log-inGrey.svg");
+  content:url("/images/log-inGrey.svg");
 }
 .copyIcon{
-  content:url("images/copyGrey.svg");
+  content:url("/images/copyGrey.svg");
+}
+.cogIcon{
+  content:url("/images/cogGrey.svg");
+}
+.trashIcon.dark{
+  content:url("/images/trashGrey.svg");
+}
+.trashIcon{
+  content:url("/images/trash.svg");
 }
 #sendIcon.dark{
-  content:url("images/sendGrey.svg");
+  content:url("/images/sendGrey.svg");
 }
 #infoIcon.dark{
-  content:url("images/infoGrey.svg");
+  content:url("/images/infoGrey.svg");
 }
 #mintIcon.dark{
-  content:url("images/hammerGrey.svg");
+  content:url("/images/hammerGrey.svg");
 }
 #burnIcon.dark{
-  content:url("images/fireGrey.svg");
+  content:url("/images/fireGrey.svg");
 }
 #authIcon.dark{
-  content:url("images/shieldGrey.svg");
+  content:url("/images/shieldGrey.svg");
 }
 #showIcon.dark{
-  content:url("images/chevron-square-downGrey.svg");
+  content:url("/images/chevron-square-downGrey.svg");
 }
 #showIcon.less{
-  content:url("images/chevron-square-up.svg");
+  content:url("/images/chevron-square-up.svg");
 }
 #showIcon.less.dark{
-  content:url("images/chevron-square-upGrey.svg");
+  content:url("/images/chevron-square-upGrey.svg");
 }
 .unverifiedIcon{
-  content:url("images/exclamation-circle.svg");
+  content:url("/images/exclamation-circle.svg");
+}
+.modalClass.dark{
+  background-color: #1b1b1b !important;
 }
 body {
   margin: 0px;
@@ -141,6 +156,9 @@ main{
 .primaryButton {
   background-color: var(--color-primary); 
   color: white;
+}
+.primaryAccent {
+  accent-color: var(--color-primary);
 }
 #verifiedOnly {
   width: -webkit-fill-available;
@@ -330,13 +348,46 @@ body.dark {
   visibility: visible;
 }
 
+#view0:after {
+  content: "BCH";
+}
+
+#view1:after {
+  content: "Tokens"
+}
+
+#view2:after {
+  content: "Create"
+}
+
+#view4:after {
+  content: "WC"
+}
+
+@media only screen and (min-width: 480px) {
+  #view0:after {
+    content: "BchWallet"
+  }
+
+  #view1:after {
+    content: "MyTokens"
+  }
+
+  #view2:after {
+    content: "CreateTokens"
+  }
+
+  #view4:after {
+    content: "WalletConnect"
+  }
+}
 
  /* Style the Image Used to Trigger the Modal */
  .nftIcon {
   border-radius: 5px;
   cursor: pointer;
   transition: 0.3s;
-}
+  }
 
 .nftIcon:hover {opacity: 0.7;}
 
