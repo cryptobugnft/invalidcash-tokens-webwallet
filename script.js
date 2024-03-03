@@ -9,11 +9,12 @@ const trustedTokenLists = [
   "https://raw.githubusercontent.com/mr-zwets/example_bcmr/main/example_bcmr.json"
 ];
 const ipfsGateway = "https://ipfs.io/ipfs/";
+const bcmrIndexer = "https://bcmr.paytaca.com/api";
 const nameWallet = "mywallet";
 const walletDomain = "https://cashonize.com/";
 
 const currentLocation = window.location.href;
-if(walletDomain == currentLocation)  document.querySelector('#banner').classList.add("hide");
+if(currentLocation.startsWith(walletDomain))  document.querySelector('#banner').classList.add("hide");
 
 const newWalletView = document.querySelector('#newWalletView');
 const footer = document.querySelector('.footer');
@@ -77,6 +78,7 @@ document.querySelector("#selectUri").value = "select";
 document.addEventListener("DOMContentLoaded", async (event) => {
   // Make sure rest of code executes after mainnet-js has been imported properly
   Object.assign(globalThis, await __mainnetPromise);
+  BaseWallet.StorageProvider = IndexedDBProvider;
 
   // Test that indexedDB is available
   var db = window.indexedDB.open('test');
@@ -100,7 +102,7 @@ document.addEventListener("DOMContentLoaded", async (event) => {
   if(network === "chipnet") window.walletClass = TestNetWallet;
   footer.classList.remove("hide");
   if(!walletExists) newWalletView.classList.remove("hide");
-  else{loadWalletInfo()};
+  else{initCashonizeWallet()};
 })
 
 window.createNewWallet = async function createNewWallet() {
@@ -110,7 +112,7 @@ window.createNewWallet = async function createNewWallet() {
   const mainnetWallet = await Wallet.named(nameWallet);
   const walletId = mainnetWallet.toDbString().replace("mainnet", "testnet");
   await TestNetWallet.replaceNamed("mywallet", walletId);
-  loadWalletInfo();
+  initCashonizeWallet();
   initWalletConnect();
 }
 
@@ -125,11 +127,11 @@ window.importWallet = async function importWallet() {
   await Wallet.replaceNamed(nameWallet, walletId);
   const walletIdTestnet = `seed:testnet:${seedphrase}:${derivationPath}`;
   await TestNetWallet.replaceNamed("mywallet", walletIdTestnet);
-  loadWalletInfo();
+  initCashonizeWallet();
   initWalletConnect();
 }
 
-async function loadWalletInfo() {
+async function initCashonizeWallet() {
   // Show My Wallet View
   changeView(0);
   const nav = document.querySelector('.nav');
@@ -145,14 +147,22 @@ async function loadWalletInfo() {
   Config.EnforceCashTokenReceiptAddresses = true;
   explorerUrl = network === "mainnet" ? explorerUrlMainnet : explorerUrlChipnet;
 
-  let balancePromise = wallet.getBalance();
+  console.time('Balance Promises');
+  const balancePromise = wallet.getBalance();
+  const maxAmountToSendPromise = wallet.getMaxAmountToSend();
+  const balancePromises = [balancePromise, maxAmountToSendPromise,];
+  const [resultWalletBalance, resultMaxAmountToSend] = await Promise.all(balancePromises);
+  console.timeEnd('Balance Promises');
+
+  let balance = resultWalletBalance;
+  let maxAmountToSend = resultMaxAmountToSend;
+
   // Enable fetching validPreGenesis on CreateTokens view
   document.querySelector('#view2').addEventListener("click", async () => {
     async function getValidPreGensis() {
       let walletUtxos = await wallet.getAddressUtxos();
       return walletUtxos.filter(utxo => !utxo.token && utxo.vout === 0);
     }
-    const balance = await balancePromise;
     if (balance.sat) {
       document.querySelector("#warningNoBCH").classList.add("hide");
       let validPreGenesis = await getValidPreGensis();
@@ -171,15 +181,8 @@ async function loadWalletInfo() {
       document.querySelector("#warningNoBCH").classList.remove("hide");
     }
   });
-  
-  // Import BCMRs in the trusted tokenlists
-  for await(const tokenListUrl of trustedTokenLists){
-    await BCMR.addMetadataRegistryFromUri(tokenListUrl);
-  }
 
   // Display USD & BC balance and watch for changes
-  let balance = await balancePromise;
-  let maxAmountToSend = await wallet.getMaxAmountToSend();
   if(unit == "satoshis"){
     document.querySelector('#balance').innerText = balance.sat;
     const bchUnit = network === "mainnet" ? " satoshis" : " testnet satoshis"; 
@@ -209,6 +212,12 @@ async function loadWalletInfo() {
       document.querySelector('#balanceUnit').innerText = bchUnit;
     }
     document.querySelector('#balanceUsd').innerText = `${balance.usd} $`;
+
+    // Emit an event to notify CashConnect sessions that balances have changed.
+    // TODO: @Mathieu, you might want to re-write this (if there's a more elegant approach than localStorage).
+    const chainId = network;
+    const chainIdFormatted = chainId === 'mainnet' ? 'bch:bitcoincash' : 'bch:bchtest';
+    window.cashConnectService.walletStateHasChanged(chainIdFormatted);
   });
 
   document.querySelector('#sendAddr').addEventListener("input", () => {
@@ -238,6 +247,11 @@ async function loadWalletInfo() {
   document.querySelector('#placeholderQr').classList.add("hide");
   document.querySelector('#qr1').classList.remove("hide");
 
+  // Import BCMRs in the trusted tokenlists
+  for await(const tokenListUrl of trustedTokenLists){
+    await BCMR.addMetadataRegistryFromUri(tokenListUrl);
+  }
+
   // Display token categories, construct arrayTokens and watch for changes
   let arrayTokens = [];
   let tokenCategories = [];
@@ -245,15 +259,26 @@ async function loadWalletInfo() {
   fetchTokens();
   async function fetchTokens() {
     arrayTokens = [];
-    const getFungibleTokensResponse = await wallet.getAllTokenBalances();
-    const getNFTsResponse = await wallet.getAllNftTokenBalances();
+    console.time('fetchTokens Promises');
+    const promiseGetFungibleTokens = wallet.getAllTokenBalances();
+    const promiseGetNFTs = wallet.getAllNftTokenBalances();
+    const balancePromises = [promiseGetFungibleTokens, promiseGetNFTs];
+    const [getFungibleTokensResponse, getNFTsResponse] = await Promise.all(balancePromises);
+    console.time('fetchTokens Promises');
+
     tokenCategories = Object.keys({...getFungibleTokensResponse, ...getNFTsResponse})
     document.querySelector('#tokenBalance').innerText = `${tokenCategories.length} different token categories`;
     for (const tokenId of Object.keys(getFungibleTokensResponse)) {
       arrayTokens.push({ tokenId, amount: getFungibleTokensResponse[tokenId] });
     }
+    console.time('Utxo Promises');
+    const nftUtxoPromises = [];
     for (const tokenId of Object.keys(getNFTsResponse)) {
-      const utxos = await wallet.getTokenUtxos(tokenId);
+      nftUtxoPromises.push(wallet.getTokenUtxos(tokenId));
+    }
+    const nftUtxoResults = await Promise.all(nftUtxoPromises);
+    for (const utxos of nftUtxoResults) {
+      const tokenId = utxos[0].token?.tokenId;
       if(utxos.length == 1){
         const tokenData = utxos[0].token;
         arrayTokens.push({ tokenId, tokenData, utxo:utxos[0] });
@@ -267,6 +292,7 @@ async function loadWalletInfo() {
         arrayTokens.push({ tokenId, nfts });
       }
     }
+    console.timeEnd('Utxo Promises');
     // Either display tokens in wallet or display there are no tokens
     const divNoTokens = document.querySelector('#noTokensFound');
     document.querySelector('#loadingTokenData').classList.add("hide");
@@ -275,7 +301,7 @@ async function loadWalletInfo() {
     if (arrayTokens.length) {
       divNoTokens.classList.add("hide");
       divVerifiedOnly.classList.remove("hide");
-      if(!importedRegistries) importRegistries(arrayTokens);
+      if(!importedRegistries) await importRegistries(arrayTokens);
       checkAuthChains(arrayTokens);
       importedRegistries = true;
     } else {
@@ -284,7 +310,17 @@ async function loadWalletInfo() {
     }
   }
 
-  watchAddressCancel = wallet.watchAddressTokenTransactions(async(tx) => fetchTokens());
+  watchAddressCancel = wallet.watchAddressTokenTransactions(async(tx) => {
+    const walletPkh = binToHex(wallet.getPublicKeyHash());
+    const tokenOutput = tx.vout.find(elem => elem.scriptPubKey.hex.includes(walletPkh));
+    const tokenId = tokenOutput?.tokenData?.category;
+    const previousTokenList = arrayTokens;
+    await fetchTokens();
+    if(!tokenId)return;
+    const isNewCategory = !previousTokenList?.find(elem => elem.tokenId == tokenId);
+    // Dynamically import token metadata
+    if(isNewCategory) await importRegistries(arrayTokens);
+  });
 
   // Functionality buttons BchWallet view
   window.maxBch = function maxBch(event) {
@@ -347,14 +383,18 @@ async function loadWalletInfo() {
     if(document.querySelector('#newtokens').value === "fungibles"){
       // Check inputField
       const tokenSupply = document.querySelector('#tokenSupply').value;
-      const validInput = Number.isInteger(+tokenSupply) && +tokenSupply > 0;
+      const validInput = isValidBigInt(tokenSupply) && tokenSupply > 0;
+      function isValidBigInt(value) {
+        try { return BigInt(value) }
+        catch (e) { return false }
+      } 
       if(!validInput){alert(`Input total supply must be a valid integer`); return}
       // Create fungible tokens
       try {
         const genesisResponse = await wallet.tokenGenesis(
           {
             cashaddr: tokenAddr,
-            amount: tokenSupply,            // fungible token amount
+            amount: BigInt(tokenSupply),    // fungible token amount
             value: 1000,                    // Satoshi value
           }, 
           opreturnData 
@@ -416,37 +456,76 @@ async function loadWalletInfo() {
 
   // Import onchain resolved BCMRs
   async function importRegistries(tokens) {
-    tokens.forEach(async (token, index) => {
-      try{
+    console.log("importRegistries")
+    if(network == "mainnet"){
+      let metadataPromises = [];
+      for(let index=0; index < tokens.length; index++){
+        const tokenId = tokens[index].tokenId;
         const tokenCard = document.querySelector("#Placeholder").children[index];
         const verifiedDiv = tokenCard.querySelector("#verified");
         const isVerified = !verifiedDiv.classList.contains("hide");
-        if(isVerified) return;
-        const authChain = await BCMR.fetchAuthChainFromChaingraph({
-          chaingraphUrl,
-          transactionHash: token.tokenId,
-          network
-        });
-        if(authChain.at(-1)){
-          try{
-            const bcmrLocation = authChain.at(-1).uris[0];
-            let httpsUrl = authChain.at(-1).httpsUrl;
-            // If IPFS, use own configured IPFS gateway
-            if(bcmrLocation.startsWith("ipfs://")) httpsUrl = bcmrLocation.replace("ipfs://", ipfsGateway);
-            await BCMR.addMetadataRegistryFromUri(httpsUrl);
-            console.log("Importing an on-chain resolved BCMR!");
-            reRenderToken(token, index);
-          }catch(e){ console.log(e) }
+        if(isVerified) continue;
+        try{
+          const metadataPromise = fetch(`${bcmrIndexer}/registries/${tokenId}/latest`);
+          metadataPromises.push(metadataPromise);
+        } catch(error){ /*console.log(error)*/ }
+      }
+      console.time('Promises BCMR indexer');
+      const resolveMetadataPromsises = Promise.all(metadataPromises);
+      const resultsMetadata = await resolveMetadataPromsises;
+      console.timeEnd('Promises BCMR indexer');
+      const jsonPromises = []
+      for(let i=0; i < resultsMetadata.length; i++){
+        const response = resultsMetadata[i];
+        if(response.status != 404){
+          const jsonPromise = response.json();
+          jsonPromises.push(jsonPromise)
         }
-      } catch(error){ }
-    })
+      }
+      const jsonResponses = await Promise.all(jsonPromises)
+      for(let i=0; i < jsonResponses.length; i++){
+        const jsonResponse = jsonResponses[i];
+        await BCMR.addMetadataRegistry(jsonResponse);
+      }
+      console.log("re-rendering tokens with new tokenInfo");
+      tokens.forEach(async (token, index) => {
+        reRenderToken(token, index);
+      })
+    } else {
+      tokens.forEach(async (token, index) => {
+        try{
+          const tokenCard = document.querySelector("#Placeholder").children[index];
+          const verifiedDiv = tokenCard.querySelector("#verified");
+          const isVerified = !verifiedDiv.classList.contains("hide");
+          if(isVerified) return;
+          const authChain = await BCMR.fetchAuthChainFromChaingraph({
+            chaingraphUrl,
+            transactionHash: token.tokenId,
+            network
+          });
+          if(authChain.at(-1)){
+            try{
+              const bcmrLocation = authChain.at(-1).uris[0];
+              let httpsUrl = authChain.at(-1).httpsUrl;
+              // If IPFS, use own configured IPFS gateway
+              if(bcmrLocation.startsWith("ipfs://")) httpsUrl = bcmrLocation.replace("ipfs://", ipfsGateway);
+              await BCMR.addMetadataRegistryFromUri(httpsUrl);
+              reRenderToken(token, index);
+            }catch(e){ console.log(e) }
+          }
+        } catch(error){ }
+      })
+    }
   }
   
   // Rerender token after new tokenInfo
   function reRenderToken(token, index) {
     const tokenCard = document.querySelector("#Placeholder").children[index];
+    const verifiedDiv = tokenCard.querySelector("#verified");
+    const isVerified = !verifiedDiv.classList.contains("hide");
+    if(isVerified) return;
+
     const tokenInfo = BCMR.getTokenInfo(token.tokenId);
-    console.log("re-rendering token with new tokenInfo");
     if(tokenInfo){
       const symbol = tokenInfo.token.symbol || "";
       tokenCard.querySelector("#tokenName").textContent = `Name: ${tokenInfo.name}`;
@@ -455,7 +534,8 @@ async function loadWalletInfo() {
       if(token.amount){
         tokenCard.querySelector("#sendUnit").textContent = symbol;
         const decimals = tokenInfo.token.decimals || 0;
-        const textTokenAmount = `${token.amount/(10**decimals)} ${symbol}`;
+        const tokenAmountDecimals = decimals ? Number(token.amount)/(10**decimals) : token.amount;
+        const textTokenAmount = `${tokenAmountDecimals} ${symbol}`;
         tokenCard.querySelector("#tokenAmount").textContent = `Token amount: ${textTokenAmount}`;
         tokenCard.querySelector("#tokenDecimals").textContent = `Number of decimals: ${decimals}`;
       }
@@ -526,7 +606,9 @@ async function loadWalletInfo() {
       const captionText = nftCard.querySelector("#caption");
       img.onclick = function(){
         modal.style.display = "block";
-        modalImg.src = this.firstChild.src;
+        let imageSrc = NFTmetadata?.uris?.image ? NFTmetadata?.uris?.image : NFTmetadata?.uris?.icon;
+        if(imageSrc.startsWith("ipfs://")) imageSrc = ipfsGateway + imageSrc.slice(7);
+        modalImg.src = imageSrc? imageSrc : iconSrc;
         captionText.textContent = NFTmetadata.name;
       }
       // Get the <span> element that closes the modal
@@ -550,6 +632,9 @@ async function loadWalletInfo() {
         const authHeadTxId = authHead.hash.slice(2);
         const tokenUtxos = await wallet.getTokenUtxos(token.tokenId);
         const authButton = tokenCard.querySelector('#authButton');
+        const reservedSupply = tokenCard.querySelector('#reservedSupply');
+        const authInfoFungible = tokenCard.querySelector('#authInfoFungible');
+        const authInfoReserved = tokenCard.querySelector('#authInfoReserved');
         const authTransfer = tokenCard.querySelector('#authTransfer');
         tokenUtxos.forEach(utxo => {
           if(utxo.txid == authHeadTxId && utxo.vout == 0){
@@ -558,8 +643,20 @@ async function loadWalletInfo() {
             authButton.onclick = () => authTransfer.classList.toggle("hide");
             const transferAuthButton = authTransfer.querySelector("#transferAuth");
             transferAuthButton.onclick = () => {
+              const reservedSupply = authTransfer.querySelector('#reservedSupply').value;
               const authDestinationAddress = authTransfer.querySelector('#destinationAddr').value;
-              transferAuth(utxo,authDestinationAddress, tokenCapabilityAuth);
+              const validInput = isValidBigInt(reservedSupply) && reservedSupply >= 0;
+              function isValidBigInt(value) {
+                try { BigInt(value); return true }
+                catch (e) { return false }
+              } 
+              if(!validInput){alert(`ReservedSupply must be a valid integer`); return}
+              transferAuth(utxo, authDestinationAddress, tokenCapabilityAuth, BigInt(reservedSupply));
+            }
+            if(! utxo?.token?.amount){
+              reservedSupply.style.display = "none";
+              authInfoFungible.style.display = "none";
+              authInfoReserved.style.display = "none";
             }
           }
         });
@@ -656,7 +753,8 @@ async function loadWalletInfo() {
       // Stuff specific for fungibles
       if(token.amount){
         tokenCard.querySelector("#tokenType").textContent = "Fungible Tokens";
-        const textTokenAmount = `${token.amount/(10**decimals)} ${symbol}`;
+        const tokenAmountDecimals = decimals ? Number(token.amount)/(10**decimals): token.amount;
+        const textTokenAmount = `${tokenAmountDecimals} ${symbol}`;
         tokenCard.querySelector("#tokenAmount").textContent = `Token amount: ${textTokenAmount}`;
         tokenCard.querySelector("#tokenDecimals").textContent = `Number of decimals: ${decimals}`;
         const tokenSend = tokenCard.querySelector('#tokenSend');
@@ -664,13 +762,16 @@ async function loadWalletInfo() {
         const sendSomeButton = tokenSend.querySelector("#sendSomeButton");
         const authButton = tokenCard.querySelector('#authButton');
         sendSomeButton.onclick = () => {
-          let tokenAmount = Number(tokenSend.querySelector('#sendTokenAmount').value);
+          let inputTokenAmount = tokenSend.querySelector('#sendTokenAmount').value;
           const inputAddress = tokenSend.querySelector('#tokenAddress').value;
-          sendTokens(inputAddress, tokenAmount, token.tokenId, tokenInfo, authButton);
+          sendTokens(inputAddress, inputTokenAmount, token.tokenId, tokenInfo, authButton);
         }
         function maxTokens(event) {
           let tokenAmount = token.amount;
-          if(tokenInfo) tokenAmount = token.amount / (10 ** tokenInfo.token.decimals);
+          if(tokenInfo){
+            const tokenAmountDecimals = decimals? Number(token.amount)/(10**decimals) : token.amount;
+            tokenAmount = tokenAmountDecimals;
+          }
           event.currentTarget.parentElement.querySelector('#sendTokenAmount').value = tokenAmount;
         }
         tokenCard.getElementById("maxButton").onclick = (event) => maxTokens(event);
@@ -780,19 +881,23 @@ async function loadWalletInfo() {
   async function sendTokens(address, amountEntered, tokenId, tokenInfo, authButton) {
     try {
       const decimals = tokenInfo? tokenInfo.token.decimals : 0;
-      const amountTokens = decimals ? amountEntered * (10 ** decimals) : amountEntered;
-      const validInput = Number.isInteger(amountTokens) && amountTokens > 0;
+      const amountTokens = decimals ? Number(amountEntered) * (10 ** decimals) : amountEntered;
+      function isValidBigInt(value) {
+        try { return BigInt(value) }
+        catch (e) { return false }
+      } 
+      const validInput = isValidBigInt(amountTokens)  && amountTokens > 0;
       if(!validInput && !decimals) throw(`Amount tokens to send must be a valid integer`);
       if(!validInput && decimals) throw(`Amount tokens to send must only have ${decimals} decimal places`);
       const hasAuth = !authButton.classList.contains("hide");
       if(hasAuth){
-        let authWarning = "You risk unintentionally sending the authority to update this token's metadata elsewhere. \nAre you sure you want to send the transaction anyways?";
+        let authWarning = "Warning: You are about to send the authority to update this token's metadata elsewhere. You should first transfer the Auth to a dedicated wallet before sending tokens. \nAre you sure you want to send this transaction anyways?";
         if (confirm(authWarning) != true) return;
       }
       const { txId } = await wallet.send([
         new TokenSendRequest({
           cashaddr: address,
-          amount: amountTokens,
+          amount: BigInt(amountTokens),
           tokenId: tokenId,
         }),
       ]);
@@ -885,15 +990,25 @@ async function loadWalletInfo() {
   }
 
   // Check the AuthChains for fungible tokens
-  async function transferAuth(autUtxo, authDestinationAddress, tokenCapability) {
+  async function transferAuth(authUtxo, authDestinationAddress, tokenCapability, reservedSupply) {
     try {
-      const tokenId = autUtxo.token.tokenId;
-      const amount = autUtxo.token.amount;
-      const nftCommitment = autUtxo.token.commitment;
+      const tokenId = authUtxo.token.tokenId;
+      const amount = authUtxo.token.amount;
+      const changeAmount = reservedSupply? amount - reservedSupply : amount;
+      const nftCommitment = authUtxo.token.commitment;
+      const authTransfer = !reservedSupply? {
+        cashaddr: authDestinationAddress,
+        value: 1000,
+        unit: 'sats',
+      } : new TokenSendRequest({
+        cashaddr: authDestinationAddress,
+        tokenId: tokenId,
+        amount: reservedSupply
+      });
       const changeOutput = amount? new TokenSendRequest({
         cashaddr: tokenAddr,
         tokenId: tokenId,
-        amount
+        amount: changeAmount
       }) : new TokenSendRequest({
         cashaddr: tokenAddr,
         tokenId: tokenId,
@@ -901,13 +1016,9 @@ async function loadWalletInfo() {
         capability: tokenCapability
       });
       const { txId } = await wallet.send([
-        {
-          cashaddr: authDestinationAddress,
-          value: 1000,
-          unit: 'sats',
-        },
+        authTransfer,
         changeOutput
-      ],{ ensureUtxos: [autUtxo] });
+      ],{ ensureUtxos: [authUtxo] });
       const displayId = `${tokenId.slice(0, 20)}...${tokenId.slice(-10)}`;
       alert(`Transferred the Auth of utxo ${displayId} to ${authDestinationAddress}`);
       console.log(`Transferred the Auth of token ${displayId} to ${authDestinationAddress} \n${explorerUrl}/tx/${txId}`);
@@ -916,6 +1027,9 @@ async function loadWalletInfo() {
       console.log(error);
     }
   }
+
+  // Initialize CashConnect.
+  window.initCashConnect();
 }
 
 // Verified only switch
@@ -1018,12 +1132,20 @@ window.selectUnit = function selectUnit(event){
 
 // Change network
 window.changeNetwork = function changeNetwork(event){
+  // Disconnect all existing CashConnect sessions.
+  // NOTE: There is likely a slim chance a user could invoke this before CashConnect is init'd.
+  //       So we check if it's initialized first.
+  if(window.cashConnectService) {
+    window.cashConnectService.disconnectAllSessions();
+  }
+
   network = event.target.value;
   window.walletClass = network === "chipnet" ? TestNetWallet : Wallet;
   localStorage.setItem("network", network);
   watchAddressCancel()
   watchBalanceCancel()
-  loadWalletInfo();
+  // quick fix: relaod the application
+  location.reload();
 }
 
 window.toggleSeedphrase = (event) => {
