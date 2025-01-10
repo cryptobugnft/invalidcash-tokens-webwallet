@@ -248,8 +248,12 @@ async function initCashonizeWallet() {
   document.querySelector('#qr1').classList.remove("hide");
 
   // Import BCMRs in the trusted tokenlists
-  for await(const tokenListUrl of trustedTokenLists){
-    await BCMR.addMetadataRegistryFromUri(tokenListUrl);
+  try{
+    for await(const tokenListUrl of trustedTokenLists){
+      await BCMR.addMetadataRegistryFromUri(tokenListUrl);
+    }
+  } catch(error){
+    console.log(error)
   }
 
   // Display token categories, construct arrayTokens and watch for changes
@@ -358,8 +362,9 @@ async function initCashonizeWallet() {
       const addr = document.querySelector('#sendAddr').value;
       const unitToSend = (unit == "BCH")? "bch" : "sat";
       const { txId } = await wallet.send([{ cashaddr: addr, value: amount, unit: unitToSend }]);
-      alert(`Sent ${amount} sats to ${addr}`);
-      console.log(`Sent ${amount} sats to ${addr} \n${explorerUrl}/tx/${txId}`);
+      const displayUnit = (unit == "BCH")? "bch" : "sats";
+      alert(`Sent ${amount} ${displayUnit} to ${addr}`);
+      console.log(`Sent ${amount} ${displayUnit} to ${addr} \n${explorerUrl}/tx/${txId}`);
       document.querySelector('#sendAmount').value = "";
       document.querySelector('#sendAddr').value = "";
     } catch (error) { alert(error) }
